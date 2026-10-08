@@ -3,6 +3,7 @@ import sqlite3
 import time
 from collections import defaultdict, deque
 from functools import wraps
+
 from flask import (
     Flask,
     render_template,
@@ -40,10 +41,8 @@ DEFAULT_THRESHOLD = 20
 WINDOW_SECONDS = 1
 ATTACK_ACTIVE_SECONDS = 10
 
-# In-memory request tracker
 request_tracker = defaultdict(deque)
 
-# Runtime threshold
 REQUEST_THRESHOLD = DEFAULT_THRESHOLD
 
 
@@ -235,19 +234,16 @@ def logout():
 
 def get_client_ip():
 
-    forwarded_for = request.headers.get(
-        "X-Forwarded-For"
-    )
+    forwarded_for = request.headers.get("X-Forwarded-For")
 
     if forwarded_for:
-
         return forwarded_for.split(",")[0].strip()
 
     return request.remote_addr or "unknown"
 
 
 # ============================================================
-# REQUEST TRACKING
+# REQUEST RATE
 # ============================================================
 
 def get_request_rate(client_ip):
@@ -365,14 +361,12 @@ def track_attack(
 
         conn.execute("""
             UPDATE attack_events
-
             SET
                 last_seen = ?,
                 peak_rate = ?,
                 suspicious_requests = ?,
                 blocked_requests = ?,
                 severity = ?
-
             WHERE id = ?
         """, (
             now,
@@ -397,7 +391,6 @@ def track_attack(
                 severity,
                 status
             )
-
             VALUES (
                 ?,
                 ?,
@@ -426,7 +419,7 @@ def track_attack(
 
 
 # ============================================================
-# ATTACK STATUS REFRESH
+# ATTACK STATUS
 # ============================================================
 
 def refresh_attack_status():
@@ -468,96 +461,97 @@ def refresh_attack_status():
 
 
 # ============================================================
-# REQUEST PROTECTION ENGINE
+# CYBERSHIELD PROTECTION ENGINE
+# ============================================================
+#
+# IMPORTANT:
+# Only /protected is monitored.
+#
+# Dashboard/API/login/static traffic is NOT counted.
 # ============================================================
 
 @app.before_request
 def protection_engine():
 
-    # Don't interfere with login/static/API navigation
-    ignored_paths = [
-        "/login",
-        "/logout",
-        "/static"
-    ]
-
-    for ignored in ignored_paths:
-
-        if request.path.startswith(ignored):
-            return None
+    # Only protect the demo customer website.
+    if not request.path.startswith("/protected"):
+        return None
 
     client_ip = get_client_ip()
 
-    requests_per_sec = get_request_rate(
-        client_ip
-    )
+    requests_per_sec = get_request_rate(client_ip)
 
-    # Only protect the demo protected website
-    if request.path.startswith("/protected"):
+    threshold = get_threshold()
 
-        if requests_per_sec > get_threshold():
+    # --------------------------------------------------------
+    # SUSPICIOUS TRAFFIC
+    # --------------------------------------------------------
 
-            track_attack(
+    if requests_per_sec > threshold:
+
+        track_attack(
+            client_ip,
+            requests_per_sec
+        )
+
+        create_alert(
+            client_ip,
+            requests_per_sec,
+            "RATE LIMIT"
+        )
+
+        conn = get_db()
+
+        conn.execute("""
+            INSERT INTO request_events (
+                timestamp,
                 client_ip,
-                requests_per_sec
-            )
-
-            create_alert(
-                client_ip,
+                method,
+                path,
                 requests_per_sec,
-                "RATE LIMIT"
+                status,
+                action,
+                response_code
             )
+            VALUES (
+                datetime('now'),
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?
+            )
+        """, (
+            client_ip,
+            request.method,
+            request.path,
+            requests_per_sec,
+            "SUSPICIOUS",
+            "RATE LIMIT",
+            429
+        ))
 
-            conn = get_db()
+        conn.commit()
+        conn.close()
 
-            conn.execute("""
-                INSERT INTO request_events (
-                    timestamp,
-                    client_ip,
-                    method,
-                    path,
-                    requests_per_sec,
-                    status,
-                    action,
-                    response_code
-                )
+        response = jsonify({
+            "status": "blocked",
+            "message": "Too many requests",
+            "requests_per_second": requests_per_sec,
+            "threshold": threshold
+        })
 
-                VALUES (
-                    datetime('now'),
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                )
-            """, (
-                client_ip,
-                request.method,
-                request.path,
-                requests_per_sec,
-                "SUSPICIOUS",
-                "RATE LIMIT",
-                429
-            ))
+        response.status_code = 429
+        response.headers["Retry-After"] = "1"
 
-            conn.commit()
-            conn.close()
+        return response
 
-            response = jsonify({
-                "status": "blocked",
-                "message": "Too many requests",
-                "requests_per_second": requests_per_sec,
-                "threshold": get_threshold()
-            })
+    # --------------------------------------------------------
+    # NORMAL TRAFFIC
+    # --------------------------------------------------------
 
-            response.status_code = 429
-            response.headers["Retry-After"] = "1"
-
-            return response
-
-    # Log normal request
     conn = get_db()
 
     conn.execute("""
@@ -571,7 +565,6 @@ def protection_engine():
             action,
             response_code
         )
-
         VALUES (
             datetime('now'),
             ?,
@@ -608,9 +601,7 @@ def dashboard():
 
     refresh_attack_status()
 
-    return render_template(
-        "dashboard.html"
-    )
+    return render_template("dashboard.html")
 
 
 # ============================================================
@@ -732,7 +723,7 @@ def real_stats():
 
 
 # ============================================================
-# REAL TRAFFIC LOGS API
+# REAL LOGS API
 # ============================================================
 
 @app.route("/api/real-logs")
@@ -752,11 +743,8 @@ def real_logs():
             status,
             action,
             response_code
-
         FROM request_events
-
         ORDER BY id DESC
-
         LIMIT 100
     """).fetchall()
 
@@ -787,11 +775,8 @@ def alerts_api():
             severity,
             message,
             action
-
         FROM alerts
-
         ORDER BY id DESC
-
         LIMIT 100
     """).fetchall()
 
@@ -827,11 +812,8 @@ def attacks_api():
             blocked_requests,
             severity,
             status
-
         FROM attack_events
-
         ORDER BY id DESC
-
         LIMIT 50
     """).fetchall()
 
@@ -940,41 +922,29 @@ def settings_update():
 @app.route("/traffic")
 @login_required
 def traffic():
-
-    return render_template(
-        "traffic.html"
-    )
+    return render_template("traffic.html")
 
 
 @app.route("/alerts")
 @login_required
 def alerts():
-
-    return render_template(
-        "alerts.html"
-    )
+    return render_template("alerts.html")
 
 
 @app.route("/logs")
 @login_required
 def logs():
-
-    return render_template(
-        "logs.html"
-    )
+    return render_template("logs.html")
 
 
 @app.route("/settings")
 @login_required
 def settings():
-
-    return render_template(
-        "settings.html"
-    )
+    return render_template("settings.html")
 
 
 # ============================================================
-# START
+# START LOCAL SERVER
 # ============================================================
 
 if __name__ == "__main__":

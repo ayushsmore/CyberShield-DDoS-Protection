@@ -1,38 +1,206 @@
-{% extends "base.html" %}
-{% block title %}CyberShield | Settings{% endblock %}
-{% block page_title %}Protection Settings{% endblock %}
-{% block content %}
-<div class="settings-grid">
-    <section class="panel">
-        <div class="panel-header"><div><div class="panel-kicker">DETECTION ENGINE</div><h2>Threshold Configuration</h2></div></div>
-        <div class="form-row">
-            <label>Requests per second threshold</label>
-            <input type="number" value="100" min="1" id="threshold">
-            <small>Traffic above this value is classified as suspicious in the current prototype.</small>
-        </div>
-        <div class="form-row">
-            <label>Protection mode</label>
-            <select><option>Rate Limit</option><option>Alert Only</option></select>
-        </div>
-        <button class="primary-btn" onclick="saveSettings()">Save Configuration</button>
-        <div id="saved" class="saved-message"></div>
-    </section>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CyberShield - Settings</title>
 
-    <section class="panel">
-        <div class="panel-header"><div><div class="panel-kicker">SYSTEM STATUS</div><h2>Protection Modules</h2></div></div>
-        <div class="status-list large">
-            <div><span>Traffic Monitoring</span><strong class="green-text">ONLINE</strong></div>
-            <div><span>Threshold Detection</span><strong class="green-text">ONLINE</strong></div>
-            <div><span>Rate Limiting</span><strong class="green-text">READY</strong></div>
-            <div><span>SQLite Logging</span><strong class="green-text">ONLINE</strong></div>
-        </div>
-    </section>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#070b14;color:#f5f7ff;font-family:Arial}
+.container{width:92%;max-width:900px;margin:50px auto}
+.header{margin-bottom:30px}
+.title{font-size:30px;font-weight:bold}
+.sub{color:#8fa4c7;margin-top:8px}
+.panel{background:#101725;border:1px solid #293951;border-radius:16px;padding:28px}
+.section{margin-bottom:30px}
+.section h2{margin-top:0}
+.label{display:block;color:#9fb1cc;margin-bottom:10px}
+input{width:100%;max-width:400px;background:#070b14;border:1px solid #40516b;color:white;padding:14px;border-radius:9px;font-size:17px}
+.help{color:#7f93b0;font-size:13px;margin-top:8px}
+button{margin-top:20px;background:#1683ff;border:0;color:white;padding:13px 22px;border-radius:9px;font-weight:bold;cursor:pointer}
+button:hover{opacity:.9}
+.info{background:#0b111d;border:1px solid #293951;border-radius:10px;padding:18px;margin-top:20px;color:#9fb1cc}
+.success{color:#5cff91;margin-top:15px}
+.error{color:#ff6874;margin-top:15px}
+.value{color:#55c7ff;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="header">
+<div class="title">⚙️ Protection Settings</div>
+<div class="sub">Configure CyberShield detection behaviour</div>
 </div>
-{% endblock %}
-{% block scripts %}
+
+<div class="panel">
+
+<div class="section">
+
+<h2>Request Rate Protection</h2>
+
+<label class="label">
+Maximum requests per second
+</label>
+
+<input
+type="number"
+id="threshold"
+min="1"
+max="10000"
+value="20"
+>
+
+<div class="help">
+Requests above this value on the protected endpoint
+will be classified as suspicious and rate-limited.
+</div>
+
+<button onclick="saveSettings()">
+Save Protection Settings
+</button>
+
+<div id="message"></div>
+
+</div>
+
+<div class="info">
+
+<strong>Current configuration</strong>
+
+<br><br>
+
+Detection window:
+<span class="value">1 second</span>
+
+<br><br>
+
+Attack status timeout:
+<span class="value">10 seconds</span>
+
+<br><br>
+
+Current threshold:
+<span class="value" id="current">20</span>
+requests/sec
+
+</div>
+
+</div>
+
+</div>
+
 <script>
-function saveSettings() {
-    document.getElementById("saved").textContent = "✓ Configuration saved for this prototype.";
+
+async function loadSettings(){
+
+try{
+
+const r=await fetch("/api/settings",{cache:"no-store"});
+
+if(r.status===401){
+location.href="/login";
+return;
 }
+
+const data=await r.json();
+
+document.getElementById("threshold").value =
+data.request_threshold;
+
+document.getElementById("current").textContent =
+data.request_threshold;
+
+}catch(err){
+console.error(err);
+}
+
+}
+
+
+async function saveSettings(){
+
+const threshold =
+parseInt(
+document.getElementById("threshold").value
+);
+
+const message =
+document.getElementById("message");
+
+
+if(
+isNaN(threshold) ||
+threshold < 1 ||
+threshold > 10000
+){
+
+message.className="error";
+
+message.textContent =
+"Enter a value between 1 and 10000.";
+
+return;
+
+}
+
+
+try{
+
+const r=await fetch(
+"/api/settings",
+{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+request_threshold:threshold
+})
+}
+);
+
+
+const data=await r.json();
+
+
+if(data.success){
+
+document.getElementById("current").textContent =
+data.request_threshold;
+
+message.className="success";
+
+message.textContent =
+"✓ Protection threshold updated successfully.";
+
+}else{
+
+message.className="error";
+
+message.textContent =
+data.message || "Unable to update settings.";
+
+}
+
+}catch(err){
+
+message.className="error";
+
+message.textContent =
+"Connection error.";
+
+}
+
+}
+
+
+loadSettings();
+
 </script>
-{% endblock %}
+
+</body>
+</html>

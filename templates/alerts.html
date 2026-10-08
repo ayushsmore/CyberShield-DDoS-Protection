@@ -1,418 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CyberShield - Security Alerts</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CyberShield - Alerts</title>
 
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            background: #070b14;
-            color: #f5f7ff;
-            font-family: Arial, sans-serif;
-        }
-
-        .container {
-            width: 95%;
-            max-width: 1400px;
-            margin: 30px auto;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-        }
-
-        .title {
-            font-size: 30px;
-            font-weight: bold;
-        }
-
-        .subtitle {
-            color: #8fa4c7;
-            margin-top: 7px;
-        }
-
-        .status {
-            color: #5cff91;
-            border: 1px solid #263b51;
-            padding: 12px 18px;
-            border-radius: 10px;
-            background: #101725;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 18px;
-            margin-bottom: 25px;
-        }
-
-        .card {
-            background: #101725;
-            border: 1px solid #293951;
-            border-radius: 14px;
-            padding: 22px;
-        }
-
-        .label {
-            color: #8fa4c7;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-
-        .number {
-            font-size: 38px;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .red {
-            color: #ff5964;
-        }
-
-        .yellow {
-            color: #ffc857;
-        }
-
-        .green {
-            color: #5cff91;
-        }
-
-        .panel {
-            background: #101725;
-            border: 1px solid #293951;
-            border-radius: 14px;
-            overflow: hidden;
-        }
-
-        .panel-header {
-            padding: 20px 25px;
-            border-bottom: 1px solid #293951;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .panel-header h2 {
-            margin: 0;
-        }
-
-        .live {
-            color: #5cff91;
-            font-size: 14px;
-        }
-
-        .table-wrapper {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 16px 18px;
-            text-align: left;
-            border-bottom: 1px solid #202d40;
-            white-space: nowrap;
-        }
-
-        th {
-            color: #8fa4c7;
-            font-size: 13px;
-            text-transform: uppercase;
-        }
-
-        td {
-            color: #e6ebf5;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 6px 11px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .suspicious {
-            background: #4b1822;
-            color: #ff6874;
-        }
-
-        .blocked {
-            background: #4b3510;
-            color: #ffc857;
-        }
-
-        .normal {
-            background: #123b26;
-            color: #5cff91;
-        }
-
-        .empty {
-            text-align: center;
-            padding: 45px;
-            color: #8fa4c7;
-        }
-
-        .refresh {
-            color: #8fa4c7;
-            font-size: 13px;
-        }
-
-        @media (max-width: 800px) {
-            .stats {
-                grid-template-columns: 1fr;
-            }
-
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-        }
-    </style>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#070b14;color:#f5f7ff;font-family:Arial}
+.container{width:95%;max-width:1450px;margin:30px auto}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
+.title{font-size:30px;font-weight:bold}
+.sub{color:#8fa4c7;margin-top:7px}
+.status{color:#5cff91;background:#101725;border:1px solid #293951;padding:12px 18px;border-radius:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:22px}
+.card{background:#101725;border:1px solid #293951;border-radius:14px;padding:22px}
+.label{color:#8fa4c7;font-size:13px;text-transform:uppercase}
+.num{font-size:36px;font-weight:bold;margin-top:8px}
+.red{color:#ff5964}.yellow{color:#ffc857}.green{color:#5cff91}
+.panel{background:#101725;border:1px solid #293951;border-radius:14px;overflow:hidden}
+.head{padding:20px 24px;border-bottom:1px solid #293951;display:flex;justify-content:space-between}
+table{width:100%;border-collapse:collapse}
+.wrap{overflow-x:auto}
+th,td{padding:15px 17px;text-align:left;border-bottom:1px solid #202d40;white-space:nowrap}
+th{color:#8fa4c7;font-size:12px}
+.badge{padding:5px 9px;border-radius:15px;font-size:11px;font-weight:bold}
+.high{background:#4b3510;color:#ffc857}
+.critical{background:#4b1822;color:#ff6874}
+.block{background:#4b3510;color:#ffc857}
+.empty{text-align:center;padding:40px;color:#8fa4c7}
+@media(max-width:700px){.stats{grid-template-columns:1fr}.header{display:block}.status{display:inline-block;margin-top:15px}}
+</style>
 </head>
 
 <body>
 
 <div class="container">
 
-    <div class="header">
-        <div>
-            <div class="title">🚨 Security Alerts</div>
-            <div class="subtitle">
-                Real-time suspicious traffic and protection events
-            </div>
-        </div>
+<div class="header">
+<div>
+<div class="title">🚨 Security Alerts</div>
+<div class="sub">Real-time suspicious traffic and protection events</div>
+</div>
+<div class="status">● ENGINE ONLINE</div>
+</div>
 
-        <div class="status">
-            ● PROTECTION ENGINE ONLINE
-        </div>
-    </div>
+<div class="stats">
 
-    <div class="stats">
+<div class="card">
+<div class="label">Total Alerts</div>
+<div class="num red" id="total">0</div>
+</div>
 
-        <div class="card">
-            <div class="label">Total Alerts</div>
-            <div class="number red" id="totalAlerts">0</div>
-        </div>
+<div class="card">
+<div class="label">Rate Limited</div>
+<div class="num yellow" id="blocked">0</div>
+</div>
 
-        <div class="card">
-            <div class="label">Rate Limited</div>
-            <div class="number yellow" id="rateLimited">0</div>
-        </div>
+<div class="card">
+<div class="label">Critical Alerts</div>
+<div class="num green" id="critical">0</div>
+</div>
 
-        <div class="card">
-            <div class="label">Latest Alert</div>
-            <div class="number green" id="latestAlert">--</div>
-        </div>
+</div>
 
-    </div>
+<div class="panel">
 
-    <div class="panel">
+<div class="head">
+<h2>Live Security Events</h2>
+<span>● REAL-TIME</span>
+</div>
 
-        <div class="panel-header">
-            <h2>Live Security Events</h2>
-            <div class="live">● REAL-TIME</div>
-        </div>
+<div class="wrap">
 
-        <div class="table-wrapper">
+<table>
 
-            <table>
+<thead>
+<tr>
+<th>Time</th>
+<th>Source IP</th>
+<th>Type</th>
+<th>Severity</th>
+<th>Message</th>
+<th>Action</th>
+</tr>
+</thead>
 
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Source IP</th>
-                        <th>Method</th>
-                        <th>Endpoint</th>
-                        <th>Request Rate</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                        <th>Response</th>
-                    </tr>
-                </thead>
+<tbody id="table">
+<tr><td colspan="6" class="empty">Loading alerts...</td></tr>
+</tbody>
 
-                <tbody id="alertsTable">
-                    <tr>
-                        <td colspan="8" class="empty">
-                            Loading security alerts...
-                        </td>
-                    </tr>
-                </tbody>
+</table>
 
-            </table>
-
-        </div>
-
-    </div>
-
-    <div style="margin-top:15px;" class="refresh">
-        Auto-refreshing every 3 seconds
-    </div>
+</div>
+</div>
 
 </div>
 
 <script>
 
-function escapeHtml(value) {
-    if (value === null || value === undefined) {
-        return "";
-    }
-
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+function e(v){
+if(v===null||v===undefined)return "";
+return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+async function load(){
 
-async function loadAlerts() {
+try{
 
-    try {
+const r=await fetch("/api/alerts",{cache:"no-store"});
 
-        const response = await fetch("/api/real-logs", {
-            cache: "no-store"
-        });
-
-        if (response.status === 401) {
-            window.location.href = "/login";
-            return;
-        }
-
-        const data = await response.json();
-
-        const events = Array.isArray(data)
-            ? data
-            : (data.logs || data.events || []);
-
-        const alerts = events.filter(event =>
-            String(event.status || "").toUpperCase() === "SUSPICIOUS" ||
-            String(event.action || "").toUpperCase().includes("RATE")
-        );
-
-        document.getElementById("totalAlerts").textContent = alerts.length;
-
-        const blocked = alerts.filter(event =>
-            String(event.action || "").toUpperCase().includes("RATE")
-        ).length;
-
-        document.getElementById("rateLimited").textContent = blocked;
-
-        if (alerts.length > 0) {
-            document.getElementById("latestAlert").textContent = "DETECTED";
-        } else {
-            document.getElementById("latestAlert").textContent = "NONE";
-        }
-
-        const table = document.getElementById("alertsTable");
-
-        if (alerts.length === 0) {
-
-            table.innerHTML = `
-                <tr>
-                    <td colspan="8" class="empty">
-                        🛡️ No suspicious traffic detected
-                    </td>
-                </tr>
-            `;
-
-            return;
-        }
-
-        table.innerHTML = alerts.map(event => {
-
-            const status = String(event.status || "UNKNOWN").toUpperCase();
-
-            const action = String(event.action || "ALLOW").toUpperCase();
-
-            const statusClass =
-                status === "SUSPICIOUS"
-                    ? "suspicious"
-                    : "normal";
-
-            const actionClass =
-                action.includes("RATE")
-                    ? "blocked"
-                    : "normal";
-
-            return `
-                <tr>
-
-                    <td>
-                        ${escapeHtml(event.timestamp || "--")}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(event.client_ip || "--")}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(event.method || "--")}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(event.path || "--")}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(event.requests_per_sec || 0)}
-                        req/sec
-                    </td>
-
-                    <td>
-                        <span class="badge ${statusClass}">
-                            ${escapeHtml(status)}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span class="badge ${actionClass}">
-                            ${escapeHtml(action)}
-                        </span>
-                    </td>
-
-                    <td>
-                        ${escapeHtml(event.response_code || "--")}
-                    </td>
-
-                </tr>
-            `;
-
-        }).join("");
-
-    } catch (error) {
-
-        console.error("Alert loading error:", error);
-
-        document.getElementById("alertsTable").innerHTML = `
-            <tr>
-                <td colspan="8" class="empty">
-                    ⚠️ Unable to load security alerts
-                </td>
-            </tr>
-        `;
-    }
+if(r.status===401){
+location.href="/login";
+return;
 }
 
+const data=await r.json();
 
-loadAlerts();
+document.getElementById("total").textContent=data.length;
 
-setInterval(loadAlerts, 3000);
+document.getElementById("blocked").textContent=
+data.filter(x=>String(x.action).includes("RATE")).length;
+
+document.getElementById("critical").textContent=
+data.filter(x=>x.severity==="CRITICAL").length;
+
+const table=document.getElementById("table");
+
+if(!data.length){
+table.innerHTML='<tr><td colspan="6" class="empty">🛡️ No security alerts</td></tr>';
+return;
+}
+
+table.innerHTML=data.map(x=>`
+
+<tr>
+<td>${e(x.timestamp)}</td>
+<td>${e(x.client_ip)}</td>
+<td>${e(x.alert_type)}</td>
+<td><span class="badge ${x.severity==="CRITICAL"?"critical":"high"}">${e(x.severity)}</span></td>
+<td>${e(x.message)}</td>
+<td><span class="badge block">${e(x.action)}</span></td>
+</tr>
+
+`).join("");
+
+}catch(err){
+console.error(err);
+}
+
+}
+
+load();
+setInterval(load,3000);
 
 </script>
 

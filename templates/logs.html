@@ -1,28 +1,129 @@
-{% extends "base.html" %}
-{% block title %}CyberShield | Logs{% endblock %}
-{% block page_title %}Traffic Logs{% endblock %}
-{% block content %}
-<div class="hero-row">
-    <p class="page-description">Historical request-rate observations and defensive actions.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CyberShield - Logs</title>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#070b14;color:#f5f7ff;font-family:Arial}
+.container{width:95%;max-width:1450px;margin:30px auto}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
+.title{font-size:30px;font-weight:bold}
+.sub{color:#8fa4c7;margin-top:7px}
+.status{color:#5cff91;background:#101725;border:1px solid #293951;padding:12px 18px;border-radius:10px}
+.panel{background:#101725;border:1px solid #293951;border-radius:14px;overflow:hidden}
+.head{padding:20px 24px;border-bottom:1px solid #293951;display:flex;justify-content:space-between}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:14px 17px;text-align:left;border-bottom:1px solid #202d40;white-space:nowrap}
+th{color:#8fa4c7;font-size:12px}
+.empty{text-align:center;padding:40px;color:#8fa4c7}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="header">
+<div>
+<div class="title">📋 Request Logs</div>
+<div class="sub">Complete CyberShield request activity</div>
 </div>
+<div class="status">● LOGGING ONLINE</div>
+</div>
+
 <div class="panel">
-    <div class="panel-header"><div><div class="panel-kicker">DATABASE</div><h2>Event History</h2></div><span class="tag">SQLite</span></div>
-    <div class="table-wrap">
-        <table><thead><tr><th>TIME</th><th>REQUEST RATE</th><th>STATUS</th><th>ACTION</th></tr></thead>
-        <tbody id="logRows"></tbody></table>
-    </div>
+
+<div class="head">
+<h2>Request History</h2>
+<span>LAST 100 EVENTS</span>
 </div>
-{% endblock %}
-{% block scripts %}
+
+<div class="wrap">
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>Time</th>
+<th>Source IP</th>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Rate</th>
+<th>Status</th>
+<th>Action</th>
+<th>Response</th>
+</tr>
+</thead>
+
+<tbody id="table">
+<tr><td colspan="9" class="empty">Loading logs...</td></tr>
+</tbody>
+
+</table>
+
+</div>
+</div>
+
+</div>
+
 <script>
-async function loadLogs() {
-    const logs = await fetch("/api/logs").then(r=>r.json());
-    document.getElementById("logRows").innerHTML = logs.length ? logs.map(x => `
-        <tr><td>${x.timestamp}</td><td>${x.requests_per_sec} req/s</td>
-        <td><span class="status ${x.status.toLowerCase()}">${x.status}</span></td><td>${x.action}</td></tr>
-    `).join("") : '<tr><td colspan="4" class="empty-row">No logs available.</td></tr>';
+
+function e(v){
+if(v===null||v===undefined)return "";
+return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
-loadLogs();
-setInterval(loadLogs, 5000);
+
+async function load(){
+
+try{
+
+const r=await fetch("/api/real-logs",{cache:"no-store"});
+
+if(r.status===401){
+location.href="/login";
+return;
+}
+
+const data=await r.json();
+
+const table=document.getElementById("table");
+
+if(!data.length){
+table.innerHTML='<tr><td colspan="9" class="empty">No logs available</td></tr>';
+return;
+}
+
+table.innerHTML=data.map(x=>`
+
+<tr>
+<td>${e(x.id)}</td>
+<td>${e(x.timestamp)}</td>
+<td>${e(x.client_ip)}</td>
+<td>${e(x.method)}</td>
+<td>${e(x.path)}</td>
+<td>${e(x.requests_per_sec)} req/s</td>
+<td>${e(x.status)}</td>
+<td>${e(x.action)}</td>
+<td>${e(x.response_code)}</td>
+</tr>
+
+`).join("");
+
+}catch(err){
+console.error(err);
+}
+
+}
+
+load();
+setInterval(load,3000);
+
 </script>
-{% endblock %}
+
+</body>
+</html>

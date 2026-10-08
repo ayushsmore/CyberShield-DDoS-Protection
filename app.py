@@ -1,21 +1,42 @@
-from flask import Flask, render_template, jsonify, request
+from flask import (
+    Flask,
+    render_template,
+    jsonify,
+    request,
+    redirect,
+    url_for,
+    session
+)
+
 import sqlite3
 import time
 from collections import defaultdict, deque
+from functools import wraps
+
+
+# ============================================================
+# CYBERSHIELD APPLICATION
+# ============================================================
 
 app = Flask(__name__)
 
+# Secret key used for login sessions
+app.secret_key = "CyberShield-Secret-Key-2026-Change-Later"
+
+
 # ============================================================
-# CYBERSHIELD CONFIGURATION
+# CONFIGURATION
 # ============================================================
 
 DATABASE = "cybershield.db"
 
-# Maximum requests allowed from one client in one second
 REQUEST_THRESHOLD = 20
-
-# Detection window
 WINDOW_SECONDS = 1
+
+
+# Demo admin credentials
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "CyberShield@2026"
 
 
 # ============================================================
@@ -30,8 +51,11 @@ request_tracker = defaultdict(deque)
 # ============================================================
 
 def get_db_connection():
+
     conn = sqlite3.connect(DATABASE)
+
     conn.row_factory = sqlite3.Row
+
     return conn
 
 
@@ -65,22 +89,22 @@ def init_db():
     """)
 
     conn.commit()
+
     conn.close()
 
 
 # ============================================================
-# REAL CLIENT IP DETECTION
+# REAL CLIENT IP
 # ============================================================
 
 def get_client_ip():
-    """
-    Get the client IP when the application is deployed
-    behind Render's proxy/load-balancer infrastructure.
-    """
 
-    forwarded_for = request.headers.get("X-Forwarded-For")
+    forwarded_for = request.headers.get(
+        "X-Forwarded-For"
+    )
 
     if forwarded_for:
+
         return forwarded_for.split(",")[0].strip()
 
     return request.remote_addr or "unknown"
@@ -96,18 +120,21 @@ def check_request_rate(client_ip):
 
     timestamps = request_tracker[client_ip]
 
-    # Remove requests older than the detection window
-    while timestamps and timestamps[0] <= current_time - WINDOW_SECONDS:
+    while (
+        timestamps
+        and timestamps[0]
+        <= current_time - WINDOW_SECONDS
+    ):
+
         timestamps.popleft()
 
-    # Add current request
     timestamps.append(current_time)
 
     return len(timestamps)
 
 
 # ============================================================
-# LOG REAL REQUEST
+# LOG REQUEST
 # ============================================================
 
 def log_real_request(
@@ -133,6 +160,7 @@ def log_real_request(
             action,
             response_code
         )
+
         VALUES (
             datetime('now'),
             ?,
@@ -154,6 +182,7 @@ def log_real_request(
     ))
 
     conn.commit()
+
     conn.close()
 
 
@@ -178,6 +207,7 @@ def create_alert(
             requests_per_sec,
             action
         )
+
         VALUES (
             datetime('now'),
             ?,
@@ -193,30 +223,115 @@ def create_alert(
     ))
 
     conn.commit()
+
     conn.close()
 
 
 # ============================================================
-# REAL REQUEST PROTECTION ENGINE
+# ADMIN LOGIN DECORATOR
+# ============================================================
+
+def login_required(function):
+
+    @wraps(function)
+    def decorated_function(*args, **kwargs):
+
+        if not session.get("admin_logged_in"):
+
+            return redirect(
+                url_for("login")
+            )
+
+        return function(*args, **kwargs)
+
+    return decorated_function
+
+
+# ============================================================
+# LOGIN PAGE
+# ============================================================
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    error = None
+
+    if request.method == "POST":
+
+        username = request.form.get(
+            "username",
+            ""
+        ).strip()
+
+        password = request.form.get(
+            "password",
+            ""
+        )
+
+        if (
+            username == ADMIN_USERNAME
+            and password == ADMIN_PASSWORD
+        ):
+
+            session["admin_logged_in"] = True
+
+            return redirect(
+                url_for("dashboard")
+            )
+
+        error = "Invalid username or password."
+
+    return render_template(
+        "login.html",
+        error=error
+    )
+
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return redirect(
+        url_for("login")
+    )
+
+
+# ============================================================
+# CYBERSHIELD REQUEST PROTECTION ENGINE
 # ============================================================
 
 @app.before_request
 def cyber_shield_protection():
 
-    # Only protect the demonstration protected website
-    if not request.path.startswith("/protected"):
+    # The protected customer website is public.
+    # The CyberShield admin dashboard is protected separately.
+
+    if not request.path.startswith(
+        "/protected"
+    ):
+
         return None
 
-    # Ignore static files
-    if request.path.startswith("/static/"):
+    if request.path.startswith(
+        "/static/"
+    ):
+
         return None
 
     client_ip = get_client_ip()
 
-    current_rate = check_request_rate(client_ip)
+    current_rate = check_request_rate(
+        client_ip
+    )
+
 
     # --------------------------------------------------------
-    # NORMAL TRAFFIC
+    # NORMAL REQUEST
     # --------------------------------------------------------
 
     if current_rate <= REQUEST_THRESHOLD:
@@ -233,8 +348,9 @@ def cyber_shield_protection():
 
         return None
 
+
     # --------------------------------------------------------
-    # SUSPICIOUS TRAFFIC
+    # SUSPICIOUS REQUEST
     # --------------------------------------------------------
 
     log_real_request(
@@ -248,38 +364,59 @@ def cyber_shield_protection():
     )
 
     create_alert(
-        message=f"High request rate detected from {client_ip}",
+        message=(
+            f"High request rate detected "
+            f"from {client_ip}"
+        ),
         severity="HIGH",
         requests_per_sec=current_rate,
         action="RATE LIMIT"
     )
 
     return jsonify({
+
         "error": "Too Many Requests",
-        "message": "CyberShield rate limit exceeded.",
-        "requests_per_second": current_rate,
-        "threshold": REQUEST_THRESHOLD
+
+        "message":
+            "CyberShield rate limit exceeded.",
+
+        "requests_per_second":
+            current_rate,
+
+        "threshold":
+            REQUEST_THRESHOLD
+
     }), 429, {
+
         "Retry-After": "1"
+
     }
 
 
 # ============================================================
-# DASHBOARD
+# CYBERSHIELD DASHBOARD
 # ============================================================
 
 @app.route("/")
+@login_required
 def dashboard():
-    return render_template("dashboard.html")
+
+    return render_template(
+        "dashboard.html"
+    )
 
 
 # ============================================================
-# LIVE TRAFFIC PAGE
+# TRAFFIC PAGE
 # ============================================================
 
 @app.route("/traffic")
+@login_required
 def traffic():
-    return render_template("traffic.html")
+
+    return render_template(
+        "traffic.html"
+    )
 
 
 # ============================================================
@@ -287,8 +424,12 @@ def traffic():
 # ============================================================
 
 @app.route("/alerts")
+@login_required
 def alerts():
-    return render_template("alerts.html")
+
+    return render_template(
+        "alerts.html"
+    )
 
 
 # ============================================================
@@ -296,8 +437,12 @@ def alerts():
 # ============================================================
 
 @app.route("/logs")
+@login_required
 def logs():
-    return render_template("logs.html")
+
+    return render_template(
+        "logs.html"
+    )
 
 
 # ============================================================
@@ -305,12 +450,16 @@ def logs():
 # ============================================================
 
 @app.route("/settings")
+@login_required
 def settings():
-    return render_template("settings.html")
+
+    return render_template(
+        "settings.html"
+    )
 
 
 # ============================================================
-# PROTECTED DEMO WEBSITE
+# CUSTOMER / PROTECTED WEBSITE
 # ============================================================
 
 @app.route("/protected")
@@ -318,16 +467,21 @@ def protected():
 
     return """
     <!DOCTYPE html>
+
     <html lang="en">
 
     <head>
 
         <meta charset="UTF-8">
 
-        <meta name="viewport"
-              content="width=device-width, initial-scale=1.0">
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
 
-        <title>CyberShield Protected Website</title>
+        <title>
+            CyberShield Protected Website
+        </title>
 
         <style>
 
@@ -336,7 +490,9 @@ def protected():
             }
 
             body {
+
                 margin: 0;
+
                 min-height: 100vh;
 
                 font-family:
@@ -354,48 +510,74 @@ def protected():
                 color: white;
 
                 display: flex;
+
                 align-items: center;
+
                 justify-content: center;
             }
 
+
             .container {
+
                 width: 90%;
+
                 max-width: 800px;
 
                 padding: 45px;
 
-                background: rgba(10, 20, 35, 0.85);
+                background:
+                    rgba(
+                        10,
+                        20,
+                        35,
+                        0.85
+                    );
 
-                border: 1px solid rgba(
-                    0,
-                    255,
-                    200,
-                    0.25
-                );
+                border:
+                    1px solid
+                    rgba(
+                        0,
+                        255,
+                        200,
+                        0.25
+                    );
 
                 border-radius: 20px;
 
                 box-shadow:
                     0 0 40px
-                    rgba(0, 255, 200, 0.12);
+                    rgba(
+                        0,
+                        255,
+                        200,
+                        0.12
+                    );
 
                 text-align: center;
             }
 
+
             .shield {
+
                 font-size: 70px;
+
                 margin-bottom: 20px;
             }
 
+
             h1 {
-                margin: 0 0 15px;
+
+                margin:
+                    0 0 15px;
 
                 color: #00ffc8;
 
                 font-size: 38px;
             }
 
+
             .subtitle {
+
                 color: #a9b7c6;
 
                 font-size: 18px;
@@ -403,21 +585,26 @@ def protected():
                 margin-bottom: 35px;
             }
 
+
             .status {
+
                 display: inline-block;
 
-                padding: 12px 22px;
+                padding:
+                    12px 22px;
 
                 border-radius: 30px;
 
-                background: rgba(
-                    0,
-                    255,
-                    150,
-                    0.12
-                );
+                background:
+                    rgba(
+                        0,
+                        255,
+                        150,
+                        0.12
+                    );
 
-                border: 1px solid
+                border:
+                    1px solid
                     rgba(
                         0,
                         255,
@@ -430,17 +617,20 @@ def protected():
                 font-weight: bold;
             }
 
+
             .info {
+
                 margin-top: 35px;
 
                 padding: 20px;
 
-                background: rgba(
-                    255,
-                    255,
-                    255,
-                    0.04
-                );
+                background:
+                    rgba(
+                        255,
+                        255,
+                        255,
+                        0.04
+                    );
 
                 border-radius: 12px;
 
@@ -452,6 +642,7 @@ def protected():
         </style>
 
     </head>
+
 
     <body>
 
@@ -466,19 +657,27 @@ def protected():
             </h1>
 
             <div class="subtitle">
-                This website is protected by
-                CyberShield.
+
+                This website is protected
+                by CyberShield.
+
             </div>
 
+
             <div class="status">
-                ● CYBERSHIELD PROTECTION ACTIVE
+
+                ● CYBERSHIELD
+                PROTECTION ACTIVE
+
             </div>
+
 
             <div class="info">
 
-                Every request to this page is
-                monitored by the CyberShield
-                request protection engine.
+                Every request to this page
+                is monitored by the
+                CyberShield request
+                protection engine.
 
                 <br><br>
 
@@ -486,9 +685,9 @@ def protected():
 
                 <br>
 
-                Excessive request rates are
-                automatically detected and
-                rate-limited.
+                Excessive request rates
+                are automatically detected
+                and rate-limited.
 
             </div>
 
@@ -505,6 +704,7 @@ def protected():
 # ============================================================
 
 @app.route("/api/real-logs")
+@login_required
 def real_logs():
 
     conn = get_db_connection()
@@ -519,8 +719,11 @@ def real_logs():
             status,
             action,
             response_code
+
         FROM request_events
+
         ORDER BY id DESC
+
         LIMIT 100
     """).fetchall()
 
@@ -533,18 +736,21 @@ def real_logs():
 
 
 # ============================================================
-# REAL TRAFFIC STATISTICS API
+# REAL STATISTICS API
 # ============================================================
 
 @app.route("/api/real-stats")
+@login_required
 def real_stats():
 
     conn = get_db_connection()
+
 
     total_requests = conn.execute("""
         SELECT COUNT(*)
         FROM request_events
     """).fetchone()[0]
+
 
     normal_requests = conn.execute("""
         SELECT COUNT(*)
@@ -552,11 +758,13 @@ def real_stats():
         WHERE status = 'NORMAL'
     """).fetchone()[0]
 
+
     suspicious_requests = conn.execute("""
         SELECT COUNT(*)
         FROM request_events
         WHERE status = 'SUSPICIOUS'
     """).fetchone()[0]
+
 
     rate_limited = conn.execute("""
         SELECT COUNT(*)
@@ -564,26 +772,35 @@ def real_stats():
         WHERE action = 'RATE LIMIT'
     """).fetchone()[0]
 
+
     alerts = conn.execute("""
         SELECT COUNT(*)
         FROM alerts
     """).fetchone()[0]
 
+
     conn.close()
+
 
     return jsonify({
 
-        "total_requests": total_requests,
+        "total_requests":
+            total_requests,
 
-        "normal_requests": normal_requests,
+        "normal_requests":
+            normal_requests,
 
-        "suspicious_requests": suspicious_requests,
+        "suspicious_requests":
+            suspicious_requests,
 
-        "rate_limited": rate_limited,
+        "rate_limited":
+            rate_limited,
 
-        "alerts": alerts,
+        "alerts":
+            alerts,
 
-        "threshold": REQUEST_THRESHOLD
+        "threshold":
+            REQUEST_THRESHOLD
 
     })
 

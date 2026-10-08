@@ -1,186 +1,756 @@
-{% extends "base.html" %}
-{% block title %}CyberShield | Dashboard{% endblock %}
-{% block page_title %}Security Overview{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-{% block content %}
-<div class="hero-row">
-    <div>
-        <p class="page-description">Real-time visibility into request activity and DDoS protection status.</p>
-    </div>
-    <button class="primary-btn" onclick="simulateTraffic(25)">
-        <span>＋</span> Add Normal Event
-    </button>
-</div>
+    <title>CyberShield | Security Dashboard</title>
 
-<div class="metric-grid">
-    <div class="metric-card">
-        <div class="metric-icon cyan">↯</div>
-        <div class="metric-label">REQUEST EVENTS</div>
-        <div class="metric-value" id="requests">0</div>
-        <div class="metric-note">Observed traffic events</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon green">✓</div>
-        <div class="metric-label">NORMAL</div>
-        <div class="metric-value" id="normal">0</div>
-        <div class="metric-note">Allowed observations</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon red">!</div>
-        <div class="metric-label">SUSPICIOUS</div>
-        <div class="metric-value" id="suspicious">0</div>
-        <div class="metric-note">Above threshold</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon amber">⛨</div>
-        <div class="metric-label">RATE LIMITED</div>
-        <div class="metric-value" id="blocked">0</div>
-        <div class="metric-note">Defensive actions</div>
-    </div>
-</div>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-<div class="dashboard-grid">
-    <section class="panel chart-panel">
-        <div class="panel-header">
-            <div>
-                <div class="panel-kicker">TRAFFIC ANALYTICS</div>
-                <h2>Request Activity</h2>
-            </div>
-            <span class="tag">LAST 50 EVENTS</span>
-        </div>
-        <div class="chart-wrap">
-            <canvas id="trafficChart"></canvas>
-            <div class="empty-chart" id="emptyChart">
-                <span>◌</span>
-                <p>Waiting for traffic observations...</p>
-            </div>
-        </div>
-    </section>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #050b14;
+            color: #e8f1f8;
+        }
 
-    <section class="panel threat-panel">
-        <div class="panel-header">
-            <div>
-                <div class="panel-kicker">THREAT ENGINE</div>
-                <h2>Current Status</h2>
-            </div>
-        </div>
-        <div class="threat-orb" id="threatOrb">
-            <div class="orb-inner">
-                <span id="threatLevel">LOW</span>
-                <small>THREAT LEVEL</small>
-            </div>
-        </div>
-        <div class="status-list">
-            <div><span>Detection Engine</span><strong class="green-text">ONLINE</strong></div>
-            <div><span>Rate Limiter</span><strong class="green-text">ACTIVE</strong></div>
-            <div><span>Event Logging</span><strong class="green-text">ENABLED</strong></div>
-        </div>
-    </section>
-</div>
+        .header {
+            padding: 22px 35px;
+            border-bottom: 1px solid #1c3042;
+            background: #08111d;
+        }
 
-<section class="panel">
-    <div class="panel-header">
-        <div>
-            <div class="panel-kicker">RECENT ACTIVITY</div>
-            <h2>Latest Traffic Events</h2>
-        </div>
-        <a href="/logs" class="text-link">View all →</a>
-    </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr><th>TIME</th><th>REQUEST RATE</th><th>STATUS</th><th>ACTION</th></tr>
-            </thead>
-            <tbody id="recentLogs">
-                <tr><td colspan="4" class="empty-row">No events recorded yet.</td></tr>
-            </tbody>
-        </table>
-    </div>
-</section>
-{% endblock %}
+        .brand {
+            font-size: 27px;
+            font-weight: bold;
+            color: #00ffc8;
+        }
 
-{% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-let trafficChart;
+        .subtitle {
+            margin-top: 5px;
+            color: #8193a5;
+            font-size: 14px;
+        }
 
-function renderDashboard(data, logs) {
-    document.getElementById("requests").textContent = data.requests;
-    document.getElementById("normal").textContent = data.normal;
-    document.getElementById("suspicious").textContent = data.suspicious;
-    document.getElementById("blocked").textContent = data.blocked;
-    document.getElementById("threatLevel").textContent = data.threat_level;
+        .container {
+            padding: 30px;
+            max-width: 1400px;
+            margin: auto;
+        }
 
-    const orb = document.getElementById("threatOrb");
-    orb.dataset.level = data.threat_level;
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
 
-    const tbody = document.getElementById("recentLogs");
-    if (!logs.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No events recorded yet.</td></tr>';
-    } else {
-        tbody.innerHTML = logs.slice(0, 8).map(row => `
-            <tr>
-                <td>${row.timestamp}</td>
-                <td><strong>${row.requests_per_sec} req/s</strong></td>
-                <td><span class="status ${row.status.toLowerCase()}">${row.status}</span></td>
-                <td>${row.action}</td>
-            </tr>
-        `).join("");
-    }
+            padding: 18px 22px;
+            margin-bottom: 25px;
 
-    const values = [...logs].reverse().map(x => x.requests_per_sec);
-    const labels = [...logs].reverse().map(x => x.timestamp.slice(11));
+            background: #0b1725;
+            border: 1px solid #1d3548;
+            border-radius: 14px;
+        }
 
-    const empty = document.getElementById("emptyChart");
-    empty.style.display = values.length ? "none" : "flex";
+        .online {
+            color: #00ff9d;
+            font-weight: bold;
+        }
 
-    const ctx = document.getElementById("trafficChart").getContext("2d");
-    if (trafficChart) trafficChart.destroy();
+        .updated {
+            color: #8193a5;
+            font-size: 13px;
+        }
 
-    trafficChart = new Chart(ctx, {
-        type: "line",
-        data: {
-            labels,
-            datasets: [{
-                data: values,
-                borderWidth: 2,
-                tension: 0.35,
-                pointRadius: 2,
-                fill: true,
-                backgroundColor: "rgba(0,229,255,0.07)",
-                borderColor: "#00e5ff"
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { ticks: { color: "#66758f", maxTicksLimit: 8 }, grid: { display: false } },
-                y: { beginAtZero: true, ticks: { color: "#66758f" }, grid: { color: "rgba(255,255,255,.05)" } }
+        .cards {
+            display: grid;
+            grid-template-columns:
+                repeat(4, 1fr);
+
+            gap: 18px;
+        }
+
+        .card {
+            background: #0b1725;
+            border: 1px solid #1d3548;
+            border-radius: 15px;
+            padding: 22px;
+
+            box-shadow:
+                0 0 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-title {
+            color: #8193a5;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value {
+            margin-top: 12px;
+            font-size: 34px;
+            font-weight: bold;
+        }
+
+        .normal {
+            color: #00ff9d;
+        }
+
+        .danger {
+            color: #ff4d6d;
+        }
+
+        .warning {
+            color: #ffc857;
+        }
+
+        .cyan {
+            color: #00d9ff;
+        }
+
+        .section {
+            margin-top: 25px;
+
+            background: #0b1725;
+            border: 1px solid #1d3548;
+            border-radius: 15px;
+
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 20px 22px;
+
+            border-bottom: 1px solid #1d3548;
+
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .live {
+            color: #00ff9d;
+            font-size: 13px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 14px 18px;
+            text-align: left;
+            border-bottom: 1px solid #172a3b;
+            font-size: 13px;
+        }
+
+        th {
+            color: #8193a5;
+            font-weight: normal;
+        }
+
+        td {
+            color: #dce7ef;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .badge-normal {
+            background: rgba(0, 255, 157, 0.1);
+            color: #00ff9d;
+        }
+
+        .badge-suspicious {
+            background: rgba(255, 77, 109, 0.12);
+            color: #ff4d6d;
+        }
+
+        .badge-rate {
+            background: rgba(255, 200, 87, 0.12);
+            color: #ffc857;
+        }
+
+        .empty {
+            padding: 35px;
+            text-align: center;
+            color: #65798b;
+        }
+
+        .protection {
+            margin-top: 25px;
+
+            padding: 22px;
+
+            border-radius: 15px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(0, 255, 200, 0.08),
+                    rgba(0, 120, 255, 0.04)
+                );
+
+            border: 1px solid rgba(0, 255, 200, 0.2);
+        }
+
+        .protection-title {
+            color: #00ffc8;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .protection-text {
+            margin-top: 8px;
+            color: #8da0b1;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 900px) {
+            .cards {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
-    });
-}
 
-async function refreshDashboard() {
-    const [stats, logs] = await Promise.all([
-        fetch("/api/stats").then(r => r.json()),
-        fetch("/api/logs").then(r => r.json())
-    ]);
-    renderDashboard(stats, logs);
-}
+        @media (max-width: 600px) {
+            .cards {
+                grid-template-columns: 1fr;
+            }
 
-async function simulateTraffic(rate) {
-    await fetch("/api/simulate", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({requests_per_sec: rate})
-    });
-    refreshDashboard();
-}
+            .container {
+                padding: 15px;
+            }
 
-refreshDashboard();
-setInterval(refreshDashboard, 4000);
-</script>
-{% endblock %}
+            .header {
+                padding: 18px;
+            }
+
+            table {
+                font-size: 11px;
+            }
+
+            th,
+            td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+
+        <div class="brand">
+            🛡️ CyberShield
+        </div>
+
+        <div class="subtitle">
+            DDoS Protection & Real-Time Traffic Security
+        </div>
+
+    </div>
+
+
+    <div class="container">
+
+        <!-- SYSTEM STATUS -->
+
+        <div class="status-bar">
+
+            <div>
+                <span class="online">
+                    ● PROTECTION ENGINE ONLINE
+                </span>
+            </div>
+
+            <div class="updated" id="lastUpdated">
+                Updating...
+            </div>
+
+        </div>
+
+
+        <!-- REAL STATISTICS -->
+
+        <div class="cards">
+
+            <div class="card">
+
+                <div class="card-title">
+                    Total Requests
+                </div>
+
+                <div
+                    class="value cyan"
+                    id="totalRequests">
+                    0
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-title">
+                    Normal Traffic
+                </div>
+
+                <div
+                    class="value normal"
+                    id="normalRequests">
+                    0
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-title">
+                    Suspicious Traffic
+                </div>
+
+                <div
+                    class="value danger"
+                    id="suspiciousRequests">
+                    0
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-title">
+                    Rate Limited
+                </div>
+
+                <div
+                    class="value warning"
+                    id="rateLimited">
+                    0
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ALERT COUNT -->
+
+        <div class="section">
+
+            <div class="section-header">
+
+                <div class="section-title">
+                    Security Overview
+                </div>
+
+                <div class="live">
+                    ● LIVE
+                </div>
+
+            </div>
+
+            <div style="padding:22px;">
+
+                <div style="color:#8193a5;">
+                    Total security alerts detected
+                </div>
+
+                <div
+                    id="alertCount"
+                    style="
+                        font-size:32px;
+                        font-weight:bold;
+                        color:#ff4d6d;
+                        margin-top:8px;
+                    ">
+                    0
+                </div>
+
+                <div
+                    style="
+                        margin-top:15px;
+                        color:#8193a5;
+                    ">
+                    Current protection threshold:
+                    <strong
+                        id="threshold"
+                        style="color:#00d9ff;">
+                        20
+                    </strong>
+                    requests/second per client
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- RECENT TRAFFIC -->
+
+        <div class="section">
+
+            <div class="section-header">
+
+                <div class="section-title">
+                    Recent Real Traffic
+                </div>
+
+                <div class="live">
+                    ● AUTO REFRESH
+                </div>
+
+            </div>
+
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Time
+                        </th>
+
+                        <th>
+                            Client IP
+                        </th>
+
+                        <th>
+                            Method
+                        </th>
+
+                        <th>
+                            Path
+                        </th>
+
+                        <th>
+                            Req/Sec
+                        </th>
+
+                        <th>
+                            Status
+                        </th>
+
+                        <th>
+                            Action
+                        </th>
+
+                        <th>
+                            Code
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="trafficTable">
+
+                    <tr>
+
+                        <td
+                            colspan="8"
+                            class="empty">
+                            Loading real traffic...
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- PROTECTION INFO -->
+
+        <div class="protection">
+
+            <div class="protection-title">
+                🛡️ CyberShield Protection Active
+            </div>
+
+            <div class="protection-text">
+
+                CyberShield continuously monitors
+                requests reaching the protected
+                application.
+
+                Requests exceeding the configured
+                threshold are classified as suspicious
+                and automatically rate-limited with
+                HTTP 429 responses.
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        // =====================================================
+        // LOAD REAL STATISTICS
+        // =====================================================
+
+        async function loadStats() {
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/real-stats",
+                        {
+                            cache: "no-store"
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+
+                document.getElementById(
+                    "totalRequests"
+                ).textContent =
+                    data.total_requests;
+
+
+                document.getElementById(
+                    "normalRequests"
+                ).textContent =
+                    data.normal_requests;
+
+
+                document.getElementById(
+                    "suspiciousRequests"
+                ).textContent =
+                    data.suspicious_requests;
+
+
+                document.getElementById(
+                    "rateLimited"
+                ).textContent =
+                    data.rate_limited;
+
+
+                document.getElementById(
+                    "alertCount"
+                ).textContent =
+                    data.alerts;
+
+
+                document.getElementById(
+                    "threshold"
+                ).textContent =
+                    data.threshold;
+
+
+                document.getElementById(
+                    "lastUpdated"
+                ).textContent =
+                    "Last updated: " +
+                    new Date().toLocaleTimeString();
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Stats error:",
+                    error
+                );
+
+            }
+
+        }
+
+
+        // =====================================================
+        // LOAD REAL TRAFFIC LOGS
+        // =====================================================
+
+        async function loadTraffic() {
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/real-logs",
+                        {
+                            cache: "no-store"
+                        }
+                    );
+
+                const logs =
+                    await response.json();
+
+
+                const table =
+                    document.getElementById(
+                        "trafficTable"
+                    );
+
+
+                if (
+                    !logs ||
+                    logs.length === 0
+                ) {
+
+                    table.innerHTML = `
+                        <tr>
+                            <td
+                                colspan="8"
+                                class="empty">
+                                No real traffic recorded yet.
+                            </td>
+                        </tr>
+                    `;
+
+                    return;
+                }
+
+
+                table.innerHTML =
+                    logs
+                        .slice(0, 20)
+                        .map(
+                            log => {
+
+                                const
+                                statusClass =
+                                    log.status ===
+                                    "SUSPICIOUS"
+                                    ? "badge-suspicious"
+                                    : "badge-normal";
+
+
+                                const
+                                actionClass =
+                                    log.action ===
+                                    "RATE LIMIT"
+                                    ? "badge-rate"
+                                    : "badge-normal";
+
+
+                                return `
+
+                                    <tr>
+
+                                        <td>
+                                            ${log.timestamp}
+                                        </td>
+
+                                        <td>
+                                            ${log.client_ip}
+                                        </td>
+
+                                        <td>
+                                            ${log.method}
+                                        </td>
+
+                                        <td>
+                                            ${log.path}
+                                        </td>
+
+                                        <td>
+                                            ${log.requests_per_sec}
+                                        </td>
+
+                                        <td>
+
+                                            <span
+                                                class="badge ${statusClass}">
+                                                ${log.status}
+                                            </span>
+
+                                        </td>
+
+                                        <td>
+
+                                            <span
+                                                class="badge ${actionClass}">
+                                                ${log.action}
+                                            </span>
+
+                                        </td>
+
+                                        <td>
+                                            ${log.response_code}
+                                        </td>
+
+                                    </tr>
+
+                                `;
+
+                            }
+                        )
+                        .join("");
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Traffic error:",
+                    error
+                );
+
+            }
+
+        }
+
+
+        // =====================================================
+        // REFRESH DASHBOARD
+        // =====================================================
+
+        async function refreshDashboard() {
+
+            await loadStats();
+
+            await loadTraffic();
+
+        }
+
+
+        // Initial load
+        refreshDashboard();
+
+
+        // Update every 2 seconds
+        setInterval(
+            refreshDashboard,
+            2000
+        );
+
+    </script>
+
+</body>
+</html>

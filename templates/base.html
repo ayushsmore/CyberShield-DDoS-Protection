@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CyberShield{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">✦</div>
+            <div>
+                <div class="brand-name">CYBERSHIELD</div>
+                <div class="brand-sub">DDoS PROTECTION</div>
+            </div>
+        </div>
+
+        <div class="system-pill">
+            <span class="pulse"></span>
+            <span>Protection Active</span>
+        </div>
+
+        <nav class="nav">
+            <div class="nav-label">MONITOR</div>
+            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+                <span>⌂</span> Dashboard
+            </a>
+            <a href="/traffic" class="nav-item {% if request.path == '/traffic' %}active{% endif %}">
+                <span>⌁</span> Live Traffic
+            </a>
+            <a href="/alerts" class="nav-item {% if request.path == '/alerts' %}active{% endif %}">
+                <span>⚠</span> Alerts
+            </a>
+            <a href="/logs" class="nav-item {% if request.path == '/logs' %}active{% endif %}">
+                <span>▤</span> Traffic Logs
+            </a>
+
+            <div class="nav-label settings-label">SYSTEM</div>
+            <a href="/settings" class="nav-item {% if request.path == '/settings' %}active{% endif %}">
+                <span>⚙</span> Settings
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="mini-status">
+                <div class="mini-dot"></div>
+                <div>
+                    <strong>Local Security Node</strong>
+                    <span>v1.0 • Educational</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <div class="eyebrow">SECURITY OPERATIONS CENTER</div>
+                <h1>{% block page_title %}Security Overview{% endblock %}</h1>
+            </div>
+            <div class="topbar-right">
+                <div class="live-indicator"><span class="pulse"></span> LIVE</div>
+                <div class="clock" id="clock">--:--:--</div>
+            </div>
+        </header>
+
+        <section class="content">
+            {% block content %}{% endblock %}
+        </section>
+    </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

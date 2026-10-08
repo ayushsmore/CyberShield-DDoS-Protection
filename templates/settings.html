@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}CyberShield | Settings{% endblock %}
+{% block page_title %}Protection Settings{% endblock %}
+{% block content %}
+<div class="settings-grid">
+    <section class="panel">
+        <div class="panel-header"><div><div class="panel-kicker">DETECTION ENGINE</div><h2>Threshold Configuration</h2></div></div>
+        <div class="form-row">
+            <label>Requests per second threshold</label>
+            <input type="number" value="100" min="1" id="threshold">
+            <small>Traffic above this value is classified as suspicious in the current prototype.</small>
+        </div>
+        <div class="form-row">
+            <label>Protection mode</label>
+            <select><option>Rate Limit</option><option>Alert Only</option></select>
+        </div>
+        <button class="primary-btn" onclick="saveSettings()">Save Configuration</button>
+        <div id="saved" class="saved-message"></div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header"><div><div class="panel-kicker">SYSTEM STATUS</div><h2>Protection Modules</h2></div></div>
+        <div class="status-list large">
+            <div><span>Traffic Monitoring</span><strong class="green-text">ONLINE</strong></div>
+            <div><span>Threshold Detection</span><strong class="green-text">ONLINE</strong></div>
+            <div><span>Rate Limiting</span><strong class="green-text">READY</strong></div>
+            <div><span>SQLite Logging</span><strong class="green-text">ONLINE</strong></div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function saveSettings() {
+    document.getElementById("saved").textContent = "✓ Configuration saved for this prototype.";
+}
+</script>
+{% endblock %}

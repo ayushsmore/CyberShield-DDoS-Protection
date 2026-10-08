@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}CyberShield | Live Traffic{% endblock %}
+{% block page_title %}Live Traffic{% endblock %}
+{% block content %}
+<div class="hero-row">
+    <p class="page-description">Observe incoming request-rate events and detection decisions.</p>
+    <button class="primary-btn" onclick="simulateTraffic(25)">＋ Normal Event</button>
+    <button class="danger-btn" onclick="simulateTraffic(180)">⚠ Simulate Suspicious Event</button>
+</div>
+
+<div class="panel">
+    <div class="panel-header">
+        <div><div class="panel-kicker">LIVE MONITOR</div><h2>Traffic Stream</h2></div>
+        <span class="tag">LOCAL TEST MODE</span>
+    </div>
+    <div class="traffic-big">
+        <div class="traffic-number" id="latestRate">--</div>
+        <div class="traffic-unit">requests / second</div>
+    </div>
+    <div class="info-banner">
+        <strong>Safe demonstration mode:</strong> buttons create synthetic local observations in the database; they do not send traffic to external systems.
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-header"><div><div class="panel-kicker">EVENT STREAM</div><h2>Latest Observations</h2></div></div>
+    <div class="table-wrap">
+        <table><thead><tr><th>TIME</th><th>RATE</th><th>STATUS</th><th>ACTION</th></tr></thead>
+        <tbody id="trafficRows"></tbody></table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function simulateTraffic(rate) {
+    const r = await fetch("/api/simulate", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({requests_per_sec: rate})
+    });
+    const data = await r.json();
+    document.getElementById("latestRate").textContent = data.requests_per_sec;
+    loadTraffic();
+}
+async function loadTraffic() {
+    const logs = await fetch("/api/logs").then(r=>r.json());
+    document.getElementById("trafficRows").innerHTML = logs.map(x => `
+        <tr><td>${x.timestamp}</td><td><strong>${x.requests_per_sec} req/s</strong></td>
+        <td><span class="status ${x.status.toLowerCase()}">${x.status}</span></td><td>${x.action}</td></tr>
+    `).join("");
+}
+loadTraffic();
+setInterval(loadTraffic, 4000);
+</script>
+{% endblock %}

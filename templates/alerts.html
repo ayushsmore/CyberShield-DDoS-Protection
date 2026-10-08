@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}CyberShield | Alerts{% endblock %}
+{% block page_title %}Security Alerts{% endblock %}
+{% block content %}
+<div class="hero-row">
+    <p class="page-description">Suspicious traffic events detected by the threshold engine.</p>
+</div>
+<div class="panel">
+    <div class="panel-header"><div><div class="panel-kicker">DETECTION EVENTS</div><h2>Alert Center</h2></div></div>
+    <div class="alert-list" id="alerts"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadAlerts() {
+    const logs = await fetch("/api/logs").then(r=>r.json());
+    const suspicious = logs.filter(x => x.status === "SUSPICIOUS");
+    document.getElementById("alerts").innerHTML = suspicious.length ? suspicious.map(x => `
+        <div class="alert-card">
+            <div class="alert-icon">!</div>
+            <div><strong>High request rate detected</strong><span>${x.timestamp} • ${x.requests_per_sec} req/s</span></div>
+            <div class="alert-action">${x.action}</div>
+        </div>
+    `).join("") : '<div class="empty-state"><span>✓</span><h3>No active alerts</h3><p>The detection engine has not recorded suspicious traffic.</p></div>';
+}
+loadAlerts();
+setInterval(loadAlerts, 4000);
+</script>
+{% endblock %}

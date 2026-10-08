@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}CyberShield | Dashboard{% endblock %}
+{% block page_title %}Security Overview{% endblock %}
+
+{% block content %}
+<div class="hero-row">
+    <div>
+        <p class="page-description">Real-time visibility into request activity and DDoS protection status.</p>
+    </div>
+    <button class="primary-btn" onclick="simulateTraffic(25)">
+        <span>＋</span> Add Normal Event
+    </button>
+</div>
+
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-icon cyan">↯</div>
+        <div class="metric-label">REQUEST EVENTS</div>
+        <div class="metric-value" id="requests">0</div>
+        <div class="metric-note">Observed traffic events</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon green">✓</div>
+        <div class="metric-label">NORMAL</div>
+        <div class="metric-value" id="normal">0</div>
+        <div class="metric-note">Allowed observations</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon red">!</div>
+        <div class="metric-label">SUSPICIOUS</div>
+        <div class="metric-value" id="suspicious">0</div>
+        <div class="metric-note">Above threshold</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon amber">⛨</div>
+        <div class="metric-label">RATE LIMITED</div>
+        <div class="metric-value" id="blocked">0</div>
+        <div class="metric-note">Defensive actions</div>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <section class="panel chart-panel">
+        <div class="panel-header">
+            <div>
+                <div class="panel-kicker">TRAFFIC ANALYTICS</div>
+                <h2>Request Activity</h2>
+            </div>
+            <span class="tag">LAST 50 EVENTS</span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="trafficChart"></canvas>
+            <div class="empty-chart" id="emptyChart">
+                <span>◌</span>
+                <p>Waiting for traffic observations...</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel threat-panel">
+        <div class="panel-header">
+            <div>
+                <div class="panel-kicker">THREAT ENGINE</div>
+                <h2>Current Status</h2>
+            </div>
+        </div>
+        <div class="threat-orb" id="threatOrb">
+            <div class="orb-inner">
+                <span id="threatLevel">LOW</span>
+                <small>THREAT LEVEL</small>
+            </div>
+        </div>
+        <div class="status-list">
+            <div><span>Detection Engine</span><strong class="green-text">ONLINE</strong></div>
+            <div><span>Rate Limiter</span><strong class="green-text">ACTIVE</strong></div>
+            <div><span>Event Logging</span><strong class="green-text">ENABLED</strong></div>
+        </div>
+    </section>
+</div>
+
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <div class="panel-kicker">RECENT ACTIVITY</div>
+            <h2>Latest Traffic Events</h2>
+        </div>
+        <a href="/logs" class="text-link">View all →</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>TIME</th><th>REQUEST RATE</th><th>STATUS</th><th>ACTION</th></tr>
+            </thead>
+            <tbody id="recentLogs">
+                <tr><td colspan="4" class="empty-row">No events recorded yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let trafficChart;
+
+function renderDashboard(data, logs) {
+    document.getElementById("requests").textContent = data.requests;
+    document.getElementById("normal").textContent = data.normal;
+    document.getElementById("suspicious").textContent = data.suspicious;
+    document.getElementById("blocked").textContent = data.blocked;
+    document.getElementById("threatLevel").textContent = data.threat_level;
+
+    const orb = document.getElementById("threatOrb");
+    orb.dataset.level = data.threat_level;
+
+    const tbody = document.getElementById("recentLogs");
+    if (!logs.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No events recorded yet.</td></tr>';
+    } else {
+        tbody.innerHTML = logs.slice(0, 8).map(row => `
+            <tr>
+                <td>${row.timestamp}</td>
+                <td><strong>${row.requests_per_sec} req/s</strong></td>
+                <td><span class="status ${row.status.toLowerCase()}">${row.status}</span></td>
+                <td>${row.action}</td>
+            </tr>
+        `).join("");
+    }
+
+    const values = [...logs].reverse().map(x => x.requests_per_sec);
+    const labels = [...logs].reverse().map(x => x.timestamp.slice(11));
+
+    const empty = document.getElementById("emptyChart");
+    empty.style.display = values.length ? "none" : "flex";
+
+    const ctx = document.getElementById("trafficChart").getContext("2d");
+    if (trafficChart) trafficChart.destroy();
+
+    trafficChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                borderWidth: 2,
+                tension: 0.35,
+                pointRadius: 2,
+                fill: true,
+                backgroundColor: "rgba(0,229,255,0.07)",
+                borderColor: "#00e5ff"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: "#66758f", maxTicksLimit: 8 }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: "#66758f" }, grid: { color: "rgba(255,255,255,.05)" } }
+            }
+        }
+    });
+}
+
+async function refreshDashboard() {
+    const [stats, logs] = await Promise.all([
+        fetch("/api/stats").then(r => r.json()),
+        fetch("/api/logs").then(r => r.json())
+    ]);
+    renderDashboard(stats, logs);
+}
+
+async function simulateTraffic(rate) {
+    await fetch("/api/simulate", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({requests_per_sec: rate})
+    });
+    refreshDashboard();
+}
+
+refreshDashboard();
+setInterval(refreshDashboard, 4000);
+</script>
+{% endblock %}

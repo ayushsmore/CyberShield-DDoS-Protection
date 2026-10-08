@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}CyberShield | Logs{% endblock %}
+{% block page_title %}Traffic Logs{% endblock %}
+{% block content %}
+<div class="hero-row">
+    <p class="page-description">Historical request-rate observations and defensive actions.</p>
+</div>
+<div class="panel">
+    <div class="panel-header"><div><div class="panel-kicker">DATABASE</div><h2>Event History</h2></div><span class="tag">SQLite</span></div>
+    <div class="table-wrap">
+        <table><thead><tr><th>TIME</th><th>REQUEST RATE</th><th>STATUS</th><th>ACTION</th></tr></thead>
+        <tbody id="logRows"></tbody></table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadLogs() {
+    const logs = await fetch("/api/logs").then(r=>r.json());
+    document.getElementById("logRows").innerHTML = logs.length ? logs.map(x => `
+        <tr><td>${x.timestamp}</td><td>${x.requests_per_sec} req/s</td>
+        <td><span class="status ${x.status.toLowerCase()}">${x.status}</span></td><td>${x.action}</td></tr>
+    `).join("") : '<tr><td colspan="4" class="empty-row">No logs available.</td></tr>';
+}
+loadLogs();
+setInterval(loadLogs, 5000);
+</script>
+{% endblock %}

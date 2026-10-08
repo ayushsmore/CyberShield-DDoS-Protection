@@ -10,6 +10,7 @@ from flask import (
 
 import sqlite3
 import time
+import os
 from collections import defaultdict, deque
 from functools import wraps
 
@@ -20,8 +21,11 @@ from functools import wraps
 
 app = Flask(__name__)
 
-# Secret key used for login sessions
-app.secret_key = "CyberShield-Secret-Key-2026-Change-Later"
+# Session secret
+app.secret_key = os.environ.get(
+    "SECRET_KEY",
+    "CyberShield-Secret-Key-2026"
+)
 
 
 # ============================================================
@@ -30,13 +34,30 @@ app.secret_key = "CyberShield-Secret-Key-2026-Change-Later"
 
 DATABASE = "cybershield.db"
 
+# Requests allowed from one client during one second
 REQUEST_THRESHOLD = 20
+
+# Detection window
 WINDOW_SECONDS = 1
 
+# An attack remains ACTIVE while suspicious
+# traffic has been seen recently.
+ATTACK_ACTIVE_SECONDS = 10
 
-# Demo admin credentials
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "CyberShield@2026"
+
+# ============================================================
+# ADMIN CREDENTIALS
+# ============================================================
+
+ADMIN_USERNAME = os.environ.get(
+    "ADMIN_USERNAME",
+    "admin"
+)
+
+ADMIN_PASSWORD = os.environ.get(
+    "ADMIN_PASSWORD",
+    "CyberShield@2026"
+)
 
 
 # ============================================================
@@ -47,7 +68,7 @@ request_tracker = defaultdict(deque)
 
 
 # ============================================================
-# DATABASE
+# DATABASE CONNECTION
 # ============================================================
 
 def get_db_connection():
@@ -59,34 +80,97 @@ def get_db_connection():
     return conn
 
 
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+
 def init_db():
 
     conn = get_db_connection()
 
+
+    # --------------------------------------------------------
+    # REAL REQUEST LOGS
+    # --------------------------------------------------------
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS request_events (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             timestamp TEXT NOT NULL,
+
             client_ip TEXT NOT NULL,
+
             method TEXT NOT NULL,
+
             path TEXT NOT NULL,
+
             requests_per_sec INTEGER NOT NULL,
+
             status TEXT NOT NULL,
+
             action TEXT NOT NULL,
+
             response_code INTEGER NOT NULL
+
         )
     """)
 
+
+    # --------------------------------------------------------
+    # SECURITY ALERTS
+    # --------------------------------------------------------
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS alerts (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             timestamp TEXT NOT NULL,
+
             message TEXT NOT NULL,
+
             severity TEXT NOT NULL,
+
             requests_per_sec INTEGER NOT NULL,
+
             action TEXT NOT NULL
+
         )
     """)
+
+
+    # --------------------------------------------------------
+    # ATTACK TRACKER
+    # --------------------------------------------------------
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attack_events (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            attack_type TEXT NOT NULL,
+
+            source_ip TEXT NOT NULL,
+
+            first_seen TEXT NOT NULL,
+
+            last_seen TEXT NOT NULL,
+
+            peak_rate INTEGER NOT NULL,
+
+            suspicious_requests INTEGER NOT NULL,
+
+            blocked_requests INTEGER NOT NULL,
+
+            severity TEXT NOT NULL,
+
+            status TEXT NOT NULL
+
+        )
+    """)
+
 
     conn.commit()
 
@@ -94,7 +178,7 @@ def init_db():
 
 
 # ============================================================
-# REAL CLIENT IP
+# REAL CLIENT IP DETECTION
 # ============================================================
 
 def get_client_ip():
@@ -120,6 +204,9 @@ def check_request_rate(client_ip):
 
     timestamps = request_tracker[client_ip]
 
+
+    # Remove requests older than the window
+
     while (
         timestamps
         and timestamps[0]
@@ -128,13 +215,17 @@ def check_request_rate(client_ip):
 
         timestamps.popleft()
 
+
+    # Add current request
+
     timestamps.append(current_time)
+
 
     return len(timestamps)
 
 
 # ============================================================
-# LOG REQUEST
+# LOG REAL REQUEST
 # ============================================================
 
 def log_real_request(
@@ -149,8 +240,10 @@ def log_real_request(
 
     conn = get_db_connection()
 
+
     conn.execute("""
         INSERT INTO request_events (
+
             timestamp,
             client_ip,
             method,
@@ -159,9 +252,11 @@ def log_real_request(
             status,
             action,
             response_code
+
         )
 
         VALUES (
+
             datetime('now'),
             ?,
             ?,
@@ -170,6 +265,7 @@ def log_real_request(
             ?,
             ?,
             ?
+
         )
     """, (
         client_ip,
@@ -180,6 +276,7 @@ def log_real_request(
         action,
         response_code
     ))
+
 
     conn.commit()
 
@@ -199,21 +296,26 @@ def create_alert(
 
     conn = get_db_connection()
 
+
     conn.execute("""
         INSERT INTO alerts (
+
             timestamp,
             message,
             severity,
             requests_per_sec,
             action
+
         )
 
         VALUES (
+
             datetime('now'),
             ?,
             ?,
             ?,
             ?
+
         )
     """, (
         message,
@@ -221,6 +323,249 @@ def create_alert(
         requests_per_sec,
         action
     ))
+
+
+    conn.commit()
+
+    conn.close()
+
+
+# ============================================================
+# ATTACK TRACKER
+# ============================================================
+
+def track_attack(
+    client_ip,
+    requests_per_sec
+):
+
+    conn = get_db_connection()
+
+
+    # Current database timestamp
+
+    now = time.strftime(
+        "%Y-%m-%d %H:%M:%S",
+        time.gmtime()
+    )
+
+
+    # --------------------------------------------------------
+    # LOOK FOR AN EXISTING RECENT ATTACK
+    # --------------------------------------------------------
+
+    attack = conn.execute("""
+        SELECT *
+
+        FROM attack_events
+
+        WHERE source_ip = ?
+
+        AND status = 'ACTIVE'
+
+        ORDER BY id DESC
+
+        LIMIT 1
+    """, (
+        client_ip,
+    )).fetchone()
+
+
+    # --------------------------------------------------------
+    # EXISTING ATTACK
+    # --------------------------------------------------------
+
+    if attack:
+
+        new_peak = max(
+            attack["peak_rate"],
+            requests_per_sec
+        )
+
+
+        new_suspicious_count = (
+            attack["suspicious_requests"]
+            + 1
+        )
+
+
+        new_blocked_count = (
+            attack["blocked_requests"]
+            + 1
+        )
+
+
+        conn.execute("""
+            UPDATE attack_events
+
+            SET
+
+                last_seen = ?,
+
+                peak_rate = ?,
+
+                suspicious_requests = ?,
+
+                blocked_requests = ?,
+
+                severity = ?
+
+            WHERE id = ?
+
+        """, (
+            now,
+
+            new_peak,
+
+            new_suspicious_count,
+
+            new_blocked_count,
+
+            "CRITICAL"
+            if new_peak >= 100
+            else "HIGH",
+
+            attack["id"]
+        ))
+
+
+        conn.commit()
+
+        conn.close()
+
+        return attack["id"]
+
+
+    # --------------------------------------------------------
+    # NEW ATTACK
+    # --------------------------------------------------------
+
+    cursor = conn.execute("""
+        INSERT INTO attack_events (
+
+            attack_type,
+
+            source_ip,
+
+            first_seen,
+
+            last_seen,
+
+            peak_rate,
+
+            suspicious_requests,
+
+            blocked_requests,
+
+            severity,
+
+            status
+
+        )
+
+        VALUES (
+
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
+
+        )
+    """, (
+
+        "HTTP Flood",
+
+        client_ip,
+
+        now,
+
+        now,
+
+        requests_per_sec,
+
+        1,
+
+        1,
+
+        "CRITICAL"
+        if requests_per_sec >= 100
+        else "HIGH",
+
+        "ACTIVE"
+
+    ))
+
+
+    attack_id = cursor.lastrowid
+
+
+    conn.commit()
+
+    conn.close()
+
+
+    return attack_id
+
+
+# ============================================================
+# UPDATE ATTACK STATUS
+# ============================================================
+
+def refresh_attack_status():
+
+    conn = get_db_connection()
+
+
+    attacks = conn.execute("""
+        SELECT *
+
+        FROM attack_events
+
+        WHERE status = 'ACTIVE'
+    """).fetchall()
+
+
+    current_time = time.time()
+
+
+    for attack in attacks:
+
+        try:
+
+            attack_time = time.strptime(
+                attack["last_seen"],
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            attack_epoch = time.mktime(
+                attack_time
+            )
+
+
+            if (
+                current_time - attack_epoch
+                > ATTACK_ACTIVE_SECONDS
+            ):
+
+                conn.execute("""
+                    UPDATE attack_events
+
+                    SET status = 'MITIGATED'
+
+                    WHERE id = ?
+                """, (
+                    attack["id"],
+                ))
+
+        except Exception:
+
+            pass
+
 
     conn.commit()
 
@@ -234,15 +579,23 @@ def create_alert(
 def login_required(function):
 
     @wraps(function)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(
+        *args,
+        **kwargs
+    ):
 
-        if not session.get("admin_logged_in"):
+        if not session.get(
+            "admin_logged_in"
+        ):
 
             return redirect(
                 url_for("login")
             )
 
-        return function(*args, **kwargs)
+        return function(
+            *args,
+            **kwargs
+        )
 
     return decorated_function
 
@@ -251,10 +604,14 @@ def login_required(function):
 # LOGIN PAGE
 # ============================================================
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route(
+    "/login",
+    methods=["GET", "POST"]
+)
 def login():
 
     error = None
+
 
     if request.method == "POST":
 
@@ -263,23 +620,33 @@ def login():
             ""
         ).strip()
 
+
         password = request.form.get(
             "password",
             ""
         )
 
+
         if (
             username == ADMIN_USERNAME
-            and password == ADMIN_PASSWORD
+            and
+            password == ADMIN_PASSWORD
         ):
 
-            session["admin_logged_in"] = True
+            session[
+                "admin_logged_in"
+            ] = True
+
 
             return redirect(
                 url_for("dashboard")
             )
 
-        error = "Invalid username or password."
+
+        error = (
+            "Invalid username or password."
+        )
+
 
     return render_template(
         "login.html",
@@ -302,80 +669,127 @@ def logout():
 
 
 # ============================================================
-# CYBERSHIELD REQUEST PROTECTION ENGINE
+# CYBERSHIELD PROTECTION ENGINE
 # ============================================================
 
 @app.before_request
 def cyber_shield_protection():
 
-    # The protected customer website is public.
-    # The CyberShield admin dashboard is protected separately.
-
+    # Only protect the customer website
     if not request.path.startswith(
         "/protected"
     ):
 
         return None
 
+
+    # Ignore static content
     if request.path.startswith(
         "/static/"
     ):
 
         return None
 
+
     client_ip = get_client_ip()
+
 
     current_rate = check_request_rate(
         client_ip
     )
 
 
-    # --------------------------------------------------------
-    # NORMAL REQUEST
-    # --------------------------------------------------------
+    # ========================================================
+    # NORMAL TRAFFIC
+    # ========================================================
 
     if current_rate <= REQUEST_THRESHOLD:
 
         log_real_request(
+
             client_ip=client_ip,
+
             method=request.method,
+
             path=request.path,
+
             requests_per_sec=current_rate,
+
             status="NORMAL",
+
             action="ALLOW",
+
             response_code=200
+
         )
 
         return None
 
 
-    # --------------------------------------------------------
-    # SUSPICIOUS REQUEST
-    # --------------------------------------------------------
+    # ========================================================
+    # SUSPICIOUS TRAFFIC
+    # ========================================================
 
     log_real_request(
+
         client_ip=client_ip,
+
         method=request.method,
+
         path=request.path,
+
         requests_per_sec=current_rate,
+
         status="SUSPICIOUS",
+
         action="RATE LIMIT",
+
         response_code=429
+
     )
 
+
+    # --------------------------------------------------------
+    # CREATE / UPDATE ATTACK
+    # --------------------------------------------------------
+
+    track_attack(
+
+        client_ip,
+
+        current_rate
+
+    )
+
+
+    # --------------------------------------------------------
+    # CREATE SECURITY ALERT
+    # --------------------------------------------------------
+
     create_alert(
+
         message=(
-            f"High request rate detected "
+            "High request rate detected "
             f"from {client_ip}"
         ),
+
         severity="HIGH",
+
         requests_per_sec=current_rate,
+
         action="RATE LIMIT"
+
     )
+
+
+    # --------------------------------------------------------
+    # RETURN HTTP 429
+    # --------------------------------------------------------
 
     return jsonify({
 
-        "error": "Too Many Requests",
+        "error":
+            "Too Many Requests",
 
         "message":
             "CyberShield rate limit exceeded.",
@@ -459,7 +873,7 @@ def settings():
 
 
 # ============================================================
-# CUSTOMER / PROTECTED WEBSITE
+# CUSTOMER PROTECTED WEBSITE
 # ============================================================
 
 @app.route("/protected")
@@ -483,11 +897,13 @@ def protected():
             CyberShield Protected Website
         </title>
 
+
         <style>
 
             * {
                 box-sizing: border-box;
             }
+
 
             body {
 
@@ -648,13 +1064,16 @@ def protected():
 
         <div class="container">
 
+
             <div class="shield">
                 🛡️
             </div>
 
+
             <h1>
                 Protected Website
             </h1>
+
 
             <div class="subtitle">
 
@@ -691,6 +1110,7 @@ def protected():
 
             </div>
 
+
         </div>
 
     </body>
@@ -709,15 +1129,24 @@ def real_logs():
 
     conn = get_db_connection()
 
+
     rows = conn.execute("""
         SELECT
+
             timestamp,
+
             client_ip,
+
             method,
+
             path,
+
             requests_per_sec,
+
             status,
+
             action,
+
             response_code
 
         FROM request_events
@@ -727,7 +1156,9 @@ def real_logs():
         LIMIT 100
     """).fetchall()
 
+
     conn.close()
+
 
     return jsonify([
         dict(row)
@@ -748,33 +1179,41 @@ def real_stats():
 
     total_requests = conn.execute("""
         SELECT COUNT(*)
+
         FROM request_events
     """).fetchone()[0]
 
 
     normal_requests = conn.execute("""
         SELECT COUNT(*)
+
         FROM request_events
+
         WHERE status = 'NORMAL'
     """).fetchone()[0]
 
 
     suspicious_requests = conn.execute("""
         SELECT COUNT(*)
+
         FROM request_events
+
         WHERE status = 'SUSPICIOUS'
     """).fetchone()[0]
 
 
     rate_limited = conn.execute("""
         SELECT COUNT(*)
+
         FROM request_events
+
         WHERE action = 'RATE LIMIT'
     """).fetchone()[0]
 
 
     alerts = conn.execute("""
         SELECT COUNT(*)
+
         FROM alerts
     """).fetchone()[0]
 
@@ -806,6 +1245,117 @@ def real_stats():
 
 
 # ============================================================
+# ATTACK TRACKER API
+# ============================================================
+
+@app.route("/api/attacks")
+@login_required
+def attacks():
+
+    # Update old active attacks
+    refresh_attack_status()
+
+
+    conn = get_db_connection()
+
+
+    rows = conn.execute("""
+        SELECT
+
+            id,
+
+            attack_type,
+
+            source_ip,
+
+            first_seen,
+
+            last_seen,
+
+            peak_rate,
+
+            suspicious_requests,
+
+            blocked_requests,
+
+            severity,
+
+            status
+
+        FROM attack_events
+
+        ORDER BY id DESC
+
+        LIMIT 50
+    """).fetchall()
+
+
+    conn.close()
+
+
+    return jsonify([
+        dict(row)
+        for row in rows
+    ])
+
+
+# ============================================================
+# ATTACK SUMMARY API
+# ============================================================
+
+@app.route("/api/attack-summary")
+@login_required
+def attack_summary():
+
+    refresh_attack_status()
+
+
+    conn = get_db_connection()
+
+
+    total_attacks = conn.execute("""
+        SELECT COUNT(*)
+
+        FROM attack_events
+    """).fetchone()[0]
+
+
+    active_attacks = conn.execute("""
+        SELECT COUNT(*)
+
+        FROM attack_events
+
+        WHERE status = 'ACTIVE'
+    """).fetchone()[0]
+
+
+    mitigated_attacks = conn.execute("""
+        SELECT COUNT(*)
+
+        FROM attack_events
+
+        WHERE status = 'MITIGATED'
+    """).fetchone()[0]
+
+
+    conn.close()
+
+
+    return jsonify({
+
+        "total_attacks":
+            total_attacks,
+
+        "active_attacks":
+            active_attacks,
+
+        "mitigated_attacks":
+            mitigated_attacks
+
+    })
+
+
+# ============================================================
 # INITIALIZE DATABASE
 # ============================================================
 
@@ -819,7 +1369,11 @@ init_db()
 if __name__ == "__main__":
 
     app.run(
+
         host="127.0.0.1",
+
         port=5000,
+
         debug=True
+
     )
